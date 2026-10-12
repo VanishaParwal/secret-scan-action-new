@@ -66,11 +66,13 @@ runs:
         SOFT_FAIL_ARG=""
         [ "${SOFT_FAIL//[$'\t\r\n ']}" = "true" ] && SOFT_FAIL_ARG="--softfail"
 
-        CMD="detect --source . --report-format sarif --report-path results.json --no-banner"
+        CMD="detect --source . --config '$RULESET_FILE' --report-format sarif --report-path results.json --no-banner"
         [ -n "$BASE_COMMAND" ] && CMD="$BASE_COMMAND"
         [ -n "$ADDITIONAL_ARGUMENTS" ] && CMD="$CMD $ADDITIONAL_ARGUMENTS"
 
-        "$SCANNER" scan --keep-results ${SOFT_FAIL_ARG:+$SOFT_FAIL_ARG} secret --engine "$SECRET_ENGINE" --command "$CMD"
+        "$SCANNER" scan --keep-results ${SOFT_FAIL_ARG:+$SOFT_FAIL_ARG} secret \
+          --engine "$SECRET_ENGINE" \
+          --command "$CMD"
 
     - name: Upload secret scan artifact
       if: ${{ always() && inputs.upload_results == 'true' }}
