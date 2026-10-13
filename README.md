@@ -51,27 +51,31 @@ Create `.github/workflows/secret-scan.yml`:
 
 ```yaml
 name: AccuKnox Secret Scan
-
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-
+  workflow_dispatch:
 jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Run Secret Scan
-        uses: accuknox/secret-scan-action-new@latest
+      - name: Checkout code (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run AccuKnox Secret Scan
+        id: accuknox
+        continue-on-error: true
+        uses:accuknox/secret-scan-action-new@main
         with:
           accuknox_token: ${{ secrets.ACCUKNOX_TOKEN }}
           accuknox_endpoint: ${{ secrets.ACCUKNOX_ENDPOINT }}
-          accuknox_label: ${{ secrets.ACCUKNOX_LABEL }}
-          soft_fail: true
+          accuknox_label: ${{ secrets.ACCUKNOX_LABEL }} 
+          additional_arguments: "--no-git"
+          upload_results: "true"
+          soft_fail: "true"
 ```
 
 ---
