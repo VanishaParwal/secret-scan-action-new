@@ -9,32 +9,44 @@ inputs:
   accuknox_token:
     description: "CSPM token"
     required: true
+
   accuknox_endpoint:
     description: "CSPM Console endpoint URL"
     required: true
+
   accuknox_label:
     description: "Label for scan results in AccuKnox Console"
     required: true
+
   additional_arguments:
     description: "Extra arguments appended to the scan command"
     required: false
     default: ""
+
   soft_fail:
     description: "Do not return an error code if there are failed checks"
     required: false
     default: "false"
+
   base_command:
     description: "Override the scan command passed to --command (optional)"
     required: false
     default: ""
+
   scanner_version:
     description: "AccuKnox ASPM scanner CLI release to use"
     required: false
     default: "v0.15.1"
+
   upload_results:
     description: "Upload scan results as GitHub artifact"
     required: false
     default: "true"
+
+  use_ruleset:
+    description: "Scan with the bundled ruleset.yaml (true) or the built-in rules (false)"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -49,6 +61,8 @@ runs:
         SOFT_FAIL: ${{ inputs.soft_fail }}
         BASE_COMMAND: ${{ inputs.base_command }}
         SCANNER_VERSION: ${{ inputs.scanner_version }}
+        USE_RULESET: ${{ inputs.use_ruleset }}
+        RULESET_FILE: ${{ github.action_path }}/ruleset.yaml
         SECRET_ENGINE: ${{ format('{0}{1}', 'git', 'leaks') }}
       run: |
         set -e
@@ -58,17 +72,38 @@ runs:
           exit 1
         fi
 
-        curl -fsSL --retry 3 https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/accuknox-aspm-scanner -o "$RUNNER_TEMP/accuknox-aspm-scanner"
+        curl -fsSL --retry 3 \
+          "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/accuknox-aspm-scanner" \
+          -o "$RUNNER_TEMP/accuknox-aspm-scanner"
+
         chmod +x "$RUNNER_TEMP/accuknox-aspm-scanner"
         SCANNER="$RUNNER_TEMP/accuknox-aspm-scanner"
+
         "$SCANNER" tool install --type "$SECRET_ENGINE"
 
         SOFT_FAIL_ARG=""
-        [ "${SOFT_FAIL//[$'\t\r\n ']}" = "true" ] && SOFT_FAIL_ARG="--softfail"
+        if [ "${SOFT_FAIL//[$'\t\r\n ']}" = "true" ]; then
+          SOFT_FAIL_ARG="--softfail"
+        fi
 
-        CMD="detect --source . --config '$RULESET_FILE' --report-format sarif --report-path results.json --no-banner"
-        [ -n "$BASE_COMMAND" ] && CMD="$BASE_COMMAND"
-        [ -n "$ADDITIONAL_ARGUMENTS" ] && CMD="$CMD $ADDITIONAL_ARGUMENTS"
+        CMD="detect --source . --report-format sarif --report-path results.sarif --no-banner"
+
+        if [ "${USE_RULESET//[$'\t\r\n ']}" = "true" ]; then
+          if [ ! -f "$RULESET_FILE" ]; then
+            echo "ERROR: ruleset file not found: $RULESET_FILE"
+            exit 1
+          fi
+
+          CMD="$CMD --config '$RULESET_FILE'"
+        fi
+
+        if [ -n "$BASE_COMMAND" ]; then
+          CMD="$BASE_COMMAND"
+        fi
+
+        if [ -n "$ADDITIONAL_ARGUMENTS" ]; then
+          CMD="$CMD $ADDITIONAL_ARGUMENTS"
+        fi
 
         "$SCANNER" scan --keep-results ${SOFT_FAIL_ARG:+$SOFT_FAIL_ARG} secret \
           --engine "$SECRET_ENGINE" \
@@ -79,6 +114,6 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: secret-scan-results
-        path: results.json
+        path: results.sarif
         if-no-files-found: warn
         retention-days: 30
